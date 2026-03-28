@@ -52,8 +52,10 @@ export default function SpendingPieChart({ data }: Props) {
     )
   }
 
-  // Top 12 categories + "Other"
-  const sorted = [...data].sort((a, b) => b.net_spend - a.net_spend)
+  // Top 12 categories + "Other" (exclude zero/negative net_spend — Recharts drops them silently)
+  const sorted = [...data]
+    .filter((c) => c.net_spend > 0)
+    .sort((a, b) => b.net_spend - a.net_spend)
   const top = sorted.slice(0, 12)
   const otherTotal = sorted.slice(12).reduce((s, c) => s + c.net_spend, 0)
   const chartData = otherTotal > 0
