@@ -35,14 +35,24 @@ export async function getTransactions(
   return request<TransactionsResponse>(`/api/transactions${qs ? `?${qs}` : ''}`)
 }
 
-export async function patchTransactionCategory(
+export async function patchTransaction(
   id: string,
-  category: string
+  fields: { category?: string; description?: string }
 ): Promise<PatchCategoryResponse> {
   return request<PatchCategoryResponse>(`/api/transactions/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ category }),
+    body: JSON.stringify(fields),
   })
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/transactions/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(`API error ${res.status}: ${text}`)
+  }
 }
 
 export async function getSummary(): Promise<SummaryResponse> {

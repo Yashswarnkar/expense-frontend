@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getCategories, getTransactions, patchTransactionCategory } from '../api/client'
+import { deleteTransaction, getCategories, getTransactions, patchTransaction } from '../api/client'
 import type { Transaction } from '../types'
 import CategoryBadge from '../components/CategoryBadge'
 import Filters, { type FilterState } from '../components/Filters'
@@ -75,9 +75,6 @@ export default function Transactions() {
     setPage(0)
   }, [filters, debouncedSearch])
 
-  // Optimistic category update — use functional updater so we don't need
-  // `transactions` in the dep array; we only need it to read `prev` before
-  // the update, which is fine since it captures the current closure.
   const handleCategoryChange = useCallback(async (id: string, newCategory: string) => {
     let prev = ''
     setTransactions((ts) => {
@@ -85,12 +82,37 @@ export default function Transactions() {
       return ts.map((t) => (t.id === id ? { ...t, category: newCategory } : t))
     })
     try {
-      await patchTransactionCategory(id, newCategory)
+      await patchTransaction(id, { category: newCategory })
     } catch {
-      // Revert on error
       setTransactions((ts) =>
         ts.map((t) => (t.id === id ? { ...t, category: prev } : t))
       )
+    }
+  }, [])
+
+  const handleDescriptionChange = useCallback(async (id: string, newDesc: string) => {
+    let prev = ''
+    setTransactions((ts) => {
+      prev = ts.find((t) => t.id === id)?.description ?? ''
+      return ts.map((t) => (t.id === id ? { ...t, description: newDesc } : t))
+    })
+    try {
+      await patchTransaction(id, { description: newDesc })
+    } catch {
+      setTransactions((ts) =>
+        ts.map((t) => (t.id === id ? { ...t, description: prev } : t))
+      )
+    }
+  }, [])
+
+  const handleDelete = useCallback(async (id: string) => {
+    setTransactions((ts) => ts.filter((t) => t.id !== id))
+    setTotal((n) => n - 1)
+    try {
+      await deleteTransaction(id)
+    } catch {
+      // Re-fetch to restore state if delete failed
+      setPage((p) => p)
     }
   }, [])
 
@@ -116,6 +138,149 @@ export default function Transactions() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const showing = Math.min(page * PAGE_SIZE + transactions.length, total)
+
+  // ── TransactionRow ──────────────────────────────────────────────────────────
+  function TransactionRow({
+    tx,
+    categories,
+    uncategorized,
+    onCategoryChange,
+    onDescriptionChange,
+    onDelete,
+  }: {
+    tx: Transaction
+    categories: string[]
+    uncategorized: boolean
+    onCategoryChange: (id: string, cat: string) => Promise<void>
+    onDescriptionChange: (id: string, desc: string) => Promise<void>
+    onDelete: (id: string) => Promise<void>
+  }) {
+    const [editingDesc, setEditingDesc] = useState(false)
+    const [descValue, setDescValue] = useState(tx.description)
+    const [confirmDelete, setConfirmDelete] = useState(false)
+    const [deleting, setDeleting] = useState(false)
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    useEffect(() => { setDescValue(tx.description) }, [tx.description])
+    useEffect(() => {
+      if (editingDesc) inputRef.current?.select()
+    }, [editingDesc])
+
+    async function commitDesc() {
+      const trimmed = descValue.trim()
+      setEditingDesc(false)
+      if (!trimmed || trimmed === tx.description) {
+        setDescValue(tx.description)
+        return
+      }
+      await onDescriptionChange(tx.id, trimmed)
+    }
+
+    async function handleDelete() {
+      if (!confirmDelete) { setConfirmDelete(true); return }
+      setDeleting(true)
+      await onDelete(tx.id)
+    }
+
+    return (
+      <tr className={`transition-colors hover:bg-slate-800/40 ${uncategorized ? 'bg-yellow-950/20' : ''}`}>
+        {/* Date */}
+        <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
+          {formatDate(tx.transaction_date)}
+        </td>
+
+        {/* Description — inline edit */}
+        <td className="px-4 py-3 text-slate-200 max-w-xs">
+          {editingDesc ? (
+            <input
+              ref={inputRef}
+              value={descValue}
+              onChange={(e) => setDescValue(e.target.value)}
+              onBlur={commitDesc}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitDesc()
+                if (e.key === 'Escape') { setDescValue(tx.description); setEditingDesc(false) }
+              }}
+              className="w-full bg-slate-700 border border-slate-500 rounded px-2 py-0.5 text-sm text-slate-100 focus:outline-none focus:ring-1 focus:ring-slate-400"
+            />
+          ) : (
+            <button
+              onClick={() => setEditingDesc(true)}
+              className="text-left w-full group"
+              title="Click to edit description"
+            >
+              <span className="truncate block group-hover:text-slate-100 transition-colors">
+                {tx.description}
+              </span>
+              {tx.reference_no && (
+                <span className="text-xs text-slate-600 block truncate">{tx.reference_no}</span>
+              )}
+            </button>
+          )}
+        </td>
+
+        {/* Amount */}
+        <td className={`px-4 py-3 font-medium whitespace-nowrap ${tx.type === 'credit' ? 'text-emerald-400' : 'text-slate-100'}`}>
+          {tx.type === 'credit' ? '+' : '−'}{formatCurrency(tx.amount)}
+        </td>
+
+        {/* Type */}
+        <td className="px-4 py-3">
+          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+            tx.type === 'credit' ? 'bg-emerald-900/50 text-emerald-400' : 'bg-slate-800 text-slate-400'
+          }`}>
+            {tx.type}
+          </span>
+        </td>
+
+        {/* Category */}
+        <td className="px-4 py-3">
+          <CategoryBadge
+            category={tx.category || 'Uncategorized'}
+            categories={categories}
+            onSave={(cat) => onCategoryChange(tx.id, cat)}
+            editable={categories.length > 0}
+          />
+        </td>
+
+        {/* Source */}
+        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+          {sourceLabel(tx.source)}
+        </td>
+
+        {/* Delete */}
+        <td className="px-3 py-3 text-right">
+          {confirmDelete ? (
+            <div className="flex items-center gap-1 justify-end">
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="text-xs px-2 py-0.5 rounded bg-rose-700 hover:bg-rose-600 text-white transition-colors disabled:opacity-50"
+              >
+                {deleting ? '…' : 'Confirm'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="text-xs px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="text-slate-600 hover:text-rose-400 transition-colors p-1 rounded"
+              title="Delete transaction"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </button>
+          )}
+        </td>
+      </tr>
+    )
+  }
 
   function SortIcon({ field }: { field: SortField }) {
     if (sortField !== field) {
@@ -214,6 +379,7 @@ export default function Transactions() {
                 <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   Source
                 </th>
+                <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-10" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
@@ -229,7 +395,7 @@ export default function Transactions() {
                 ))
               ) : sorted.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500">
                     No transactions found.
                   </td>
                 </tr>
@@ -237,60 +403,15 @@ export default function Transactions() {
                 sorted.map((tx) => {
                   const uncategorized = !tx.category || tx.category === 'Uncategorized'
                   return (
-                    <tr
+                    <TransactionRow
                       key={tx.id}
-                      className={`transition-colors hover:bg-slate-800/40 ${
-                        uncategorized ? 'bg-yellow-950/20' : ''
-                      }`}
-                    >
-                      {/* Date */}
-                      <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
-                        {formatDate(tx.transaction_date)}
-                      </td>
-
-                      {/* Description */}
-                      <td className="px-4 py-3 text-slate-200 max-w-xs">
-                        <span className="truncate block" title={tx.description}>
-                          {tx.description}
-                        </span>
-                        {tx.reference_no && (
-                          <span className="text-xs text-slate-600 block truncate">{tx.reference_no}</span>
-                        )}
-                      </td>
-
-                      {/* Amount */}
-                      <td className={`px-4 py-3 font-medium whitespace-nowrap ${
-                        tx.type === 'credit' ? 'text-emerald-400' : 'text-slate-100'
-                      }`}>
-                        {tx.type === 'credit' ? '+' : '−'}{formatCurrency(tx.amount)}
-                      </td>
-
-                      {/* Type */}
-                      <td className="px-4 py-3">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                          tx.type === 'credit'
-                            ? 'bg-emerald-900/50 text-emerald-400'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {tx.type}
-                        </span>
-                      </td>
-
-                      {/* Category — inline edit */}
-                      <td className="px-4 py-3">
-                        <CategoryBadge
-                          category={tx.category || 'Uncategorized'}
-                          categories={categories}
-                          onSave={(cat) => handleCategoryChange(tx.id, cat)}
-                          editable={categories.length > 0}
-                        />
-                      </td>
-
-                      {/* Source */}
-                      <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
-                        {sourceLabel(tx.source)}
-                      </td>
-                    </tr>
+                      tx={tx}
+                      categories={categories}
+                      uncategorized={uncategorized}
+                      onCategoryChange={handleCategoryChange}
+                      onDescriptionChange={handleDescriptionChange}
+                      onDelete={handleDelete}
+                    />
                   )
                 })
               )}
