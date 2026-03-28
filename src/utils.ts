@@ -72,6 +72,16 @@ export function categoryChartColor(category: string): string {
     '#818cf8', // indigo-400
     '#a3e635', // lime-400
     '#e879f9', // fuchsia-400
+    '#38bdf8', // sky-400
+    '#4ade80', // green-400
+    '#f87171', // red-400
+    '#facc15', // yellow-400
+    '#c084fc', // purple-400
+    '#67e8f9', // cyan-300
+    '#86efac', // green-300
+    '#fca5a5', // red-300
+    '#fdba74', // orange-300
+    '#93c5fd', // blue-300
   ]
   let hash = 0
   for (let i = 0; i < category.length; i++) {
