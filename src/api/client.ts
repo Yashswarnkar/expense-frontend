@@ -55,8 +55,12 @@ export async function deleteTransaction(id: string): Promise<void> {
   }
 }
 
-export async function getSummary(): Promise<SummaryResponse> {
-  return request<SummaryResponse>('/api/summary')
+export async function getSummary(from?: string, to?: string): Promise<SummaryResponse> {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to)   params.set('to', to)
+  const qs = params.toString()
+  return request<SummaryResponse>(`/api/summary${qs ? `?${qs}` : ''}`)
 }
 
 export async function getCategories(): Promise<string[]> {

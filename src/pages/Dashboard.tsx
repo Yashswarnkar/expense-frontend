@@ -4,7 +4,7 @@ import type { SummaryResponse } from '../types'
 import MonthSelector from '../components/MonthSelector'
 import SpendingBarChart from '../components/SpendingBarChart'
 import SpendingPieChart from '../components/SpendingPieChart'
-import { formatCurrency } from '../utils'
+import { formatCurrency, monthBounds, monthLabel } from '../utils'
 
 function StatCard({
   label,
@@ -38,10 +38,8 @@ export default function Dashboard() {
   useEffect(() => {
     setLoading(true)
     setError(null)
-    // /api/summary has no date filter in the API contract, so we fetch
-    // the all-time summary for charts. The month selector is kept for
-    // future use when the backend gains date-scoped summary support.
-    getSummary()
+    const { from, to } = monthBounds(year, month)
+    getSummary(from, to)
       .then((data) => {
         setSummary(data)
         setLoading(false)
@@ -52,7 +50,6 @@ export default function Dashboard() {
       })
   }, [year, month])
 
-  // Derived totals (all-time from summary, as API has no date filter on /summary)
   const totalSpend = summary?.spending.reduce((s, c) => s + c.net_spend, 0) ?? 0
   const totalCC = summary?.cc_payments.reduce((s, c) => s + c.net_spend, 0) ?? 0
   const totalCCCount = summary?.cc_payments.reduce((s, c) => s + c.count, 0) ?? 0
@@ -64,7 +61,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-slate-100">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Spending overview</p>
+          <p className="text-sm text-slate-500 mt-0.5">Spending overview · {monthLabel(year, month)}</p>
         </div>
         <MonthSelector year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m) }} />
       </div>
@@ -88,7 +85,7 @@ export default function Dashboard() {
           <StatCard
             label="Total Spend"
             value={formatCurrency(totalSpend)}
-            sub={`across ${categoryCount} categories`}
+            sub={`${monthLabel(year, month)} · ${categoryCount} categories`}
           />
           <StatCard
             label="CC Payments"
