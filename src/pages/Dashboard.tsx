@@ -50,7 +50,7 @@ export default function Dashboard() {
       })
   }, [year, month])
 
-  const totalSpend = summary?.spending.reduce((s, c) => s + c.total_debit, 0) ?? 0
+  const totalSpend = summary?.spending.reduce((s, c) => s + c.net_spend, 0) ?? 0
   const totalCC = summary?.cc_payments.reduce((s, c) => s + c.net_spend, 0) ?? 0
   const totalCCCount = summary?.cc_payments.reduce((s, c) => s + c.count, 0) ?? 0
   const categoryCount = summary?.spending.length ?? 0

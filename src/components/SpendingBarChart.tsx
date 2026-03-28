@@ -39,8 +39,8 @@ export default function SpendingBarChart({ data }: Props) {
   }
 
   const sorted = [...data]
-    .filter((c) => c.total_debit > 0)
-    .sort((a, b) => b.total_debit - a.total_debit)
+    .filter((c) => c.net_spend > 0)
+    .sort((a, b) => b.net_spend - a.net_spend)
 
   return (
     <ResponsiveContainer width="100%" height={280}>
@@ -64,7 +64,7 @@ export default function SpendingBarChart({ data }: Props) {
           width={52}
         />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148,163,184,0.06)' }} />
-        <Bar dataKey="total_debit" radius={[4, 4, 0, 0]}>
+        <Bar dataKey="net_spend" radius={[4, 4, 0, 0]}>
           {sorted.map((entry) => (
             <Cell key={entry.category} fill={categoryChartColor(entry.category)} />
           ))}
